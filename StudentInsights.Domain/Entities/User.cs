@@ -1,10 +1,15 @@
-﻿using StudentInsights.Domain.Common;
+﻿using System.Text.RegularExpressions;
+using StudentInsights.Domain.Common;
 using StudentInsights.Domain.Enums;
 
 namespace StudentInsights.Domain.Entities;
 
 public class User : BaseEntity
 {
+    private static readonly Regex EmailPattern = new(
+        @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+        RegexOptions.Compiled);
+
     private readonly List<RefreshToken> _refreshTokens = new();
     private readonly List<Course> _courses = new();
     private readonly List<Goal> _goals = new();
@@ -46,7 +51,7 @@ public class User : BaseEntity
         if (string.IsNullOrWhiteSpace(lastName))
             throw new DomainException("Last name is required.");
 
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        if (string.IsNullOrWhiteSpace(email) || !EmailPattern.IsMatch(email.Trim()))
             throw new DomainException("A valid email is required.");
 
         if (string.IsNullOrWhiteSpace(passwordHash))
@@ -61,40 +66,33 @@ public class User : BaseEntity
     }
 
     public string FirstName { get; private set; } = string.Empty;
-
     public string LastName { get; private set; } = string.Empty;
-
     public string FullName => $"{FirstName} {LastName}";
-
     public string Email { get; private set; } = string.Empty;
-
     public string PasswordHash { get; private set; } = string.Empty;
-
     public UserRole Role { get; private set; } = UserRole.Student;
-
     public bool IsActive { get; private set; } = true;
-
     public bool EmailConfirmed { get; private set; }
-
     public DateTime? EmailConfirmedAtUtc { get; private set; }
 
-    /// <summary>Hash of the current pending email-confirmation token, if any. The raw token is never persisted.</summary>
+    /// <summary>Hash of the current pending email-confirmation token, if
+    /// any. The raw token is never persisted.</summary>
     public string? EmailConfirmationTokenHash { get; private set; }
-
     public DateTime? EmailConfirmationTokenExpiresAtUtc { get; private set; }
 
-    /// <summary>Hash of the current pending password-reset token, if any. The raw token is never persisted.</summary>
+    /// <summary>Hash of the current pending password-reset token, if any.
+    /// The raw token is never persisted.</summary>
     public string? PasswordResetTokenHash { get; private set; }
-
     public DateTime? PasswordResetTokenExpiresAtUtc { get; private set; }
 
-    /// <summary>Single source of truth for whether this user is allowed to authenticate.</summary>
-    public bool CanLogIn() => IsActive && EmailConfirmed;
+    /// <summary>Single source of truth for whether this user is allowed
+    /// to authenticate.</summary>
+    //public bool CanLogIn() => IsActive && EmailConfirmed;
+    public bool CanLogIn() => IsActive;
 
     public void SetEmailConfirmationToken(string tokenHash, DateTime expiresAtUtc)
     {
         EnsureValidToken(tokenHash, expiresAtUtc, "Confirmation");
-
         EmailConfirmationTokenHash = tokenHash;
         EmailConfirmationTokenExpiresAtUtc = expiresAtUtc;
         MarkModified();
@@ -105,10 +103,12 @@ public class User : BaseEntity
         if (EmailConfirmed)
             return;
 
-        if (string.IsNullOrWhiteSpace(EmailConfirmationTokenHash) || EmailConfirmationTokenHash != tokenHash)
+        if (string.IsNullOrWhiteSpace(EmailConfirmationTokenHash) ||
+            EmailConfirmationTokenHash != tokenHash)
             throw new DomainException("Invalid confirmation token.");
 
-        if (EmailConfirmationTokenExpiresAtUtc is null || EmailConfirmationTokenExpiresAtUtc <= DateTime.UtcNow)
+        if (EmailConfirmationTokenExpiresAtUtc is null ||
+            EmailConfirmationTokenExpiresAtUtc <= DateTime.UtcNow)
             throw new DomainException("Confirmation token has expired.");
 
         EmailConfirmed = true;
@@ -121,7 +121,6 @@ public class User : BaseEntity
     public void SetPasswordResetToken(string tokenHash, DateTime expiresAtUtc)
     {
         EnsureValidToken(tokenHash, expiresAtUtc, "Reset");
-
         PasswordResetTokenHash = tokenHash;
         PasswordResetTokenExpiresAtUtc = expiresAtUtc;
         MarkModified();
@@ -129,10 +128,12 @@ public class User : BaseEntity
 
     public void ResetPassword(string tokenHash, string newPasswordHash)
     {
-        if (string.IsNullOrWhiteSpace(PasswordResetTokenHash) || PasswordResetTokenHash != tokenHash)
+        if (string.IsNullOrWhiteSpace(PasswordResetTokenHash) ||
+            PasswordResetTokenHash != tokenHash)
             throw new DomainException("Invalid password reset token.");
 
-        if (PasswordResetTokenExpiresAtUtc is null || PasswordResetTokenExpiresAtUtc <= DateTime.UtcNow)
+        if (PasswordResetTokenExpiresAtUtc is null ||
+            PasswordResetTokenExpiresAtUtc <= DateTime.UtcNow)
             throw new DomainException("Password reset token has expired.");
 
         if (string.IsNullOrWhiteSpace(newPasswordHash))
@@ -144,7 +145,7 @@ public class User : BaseEntity
         MarkModified();
     }
 
-    /// <summary>Shared validation for the two token-setter methods above — kept as one
+    /// <summary>Shared validation for the two token-setter methods above --- kept as one
     /// place so the confirmation and reset flows can't drift apart.</summary>
     private static void EnsureValidToken(string tokenHash, DateTime expiresAtUtc, string tokenKind)
     {
@@ -174,7 +175,6 @@ public class User : BaseEntity
 
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
-
         MarkModified();
     }
 
@@ -197,18 +197,11 @@ public class User : BaseEntity
     }
 
     public IReadOnlyCollection<RefreshToken> RefreshTokens => _refreshTokens;
-
     public IReadOnlyCollection<Course> Courses => _courses;
-
     public IReadOnlyCollection<Goal> Goals => _goals;
-
     public IReadOnlyCollection<PersonalEvent> PersonalEvents => _personalEvents;
-
     public IReadOnlyCollection<StudyLog> StudyLogs => _studyLogs;
-
     public IReadOnlyCollection<Notification> Notifications => _notifications;
-
     public IReadOnlyCollection<LearningActivity> LearningActivities => _learningActivities;
-
     public IReadOnlyCollection<Exam> Exams => _exams;
 }

@@ -17,6 +17,9 @@ public class ConfirmEmailCommandHandler : IRequestHandler<ConfirmEmailCommand>
 
     public async Task Handle(ConfirmEmailCommand request, CancellationToken cancellationToken)
     {
+        if (request.UserId == Guid.Empty)
+            throw new DomainException("Invalid confirmation request.");
+
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
 

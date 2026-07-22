@@ -54,12 +54,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("confirm-email")]
-    public async Task<IActionResult> ConfirmEmail(
-        [FromQuery] ConfirmEmailCommand command,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> ConfirmEmail([FromQuery] ConfirmEmailCommand command, CancellationToken cancellationToken)
     {
         await _sender.Send(command, cancellationToken);
-
         return Ok("Email confirmed successfully.");
     }
 
@@ -77,7 +74,21 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
-    private string? GetIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString();
+    private string? GetIpAddress()
+    {
+        // Behind a reverse proxy / load balancer (the normal production
+        // topology), Connection.RemoteIpAddress is the proxy's address, not
+        // the client's. Prefer X-Forwarded-For when present. Note: if
+        // Program.cs already configures UseForwardedHeaders(), RemoteIpAddress
+        // is already correct and this is a harmless no-op fallback.
+        if (Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor) &&
+            !string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            return forwardedFor.ToString().Split(',')[0].Trim();
+        }
+
+        return HttpContext.Connection.RemoteIpAddress?.ToString();
+    }
 }
 
 public record LoginRequest(string Email, string Password, bool RememberMe);

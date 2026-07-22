@@ -17,7 +17,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure()));
 
 builder.Services.AddScoped<IApplicationDbContext>(provider =>
     provider.GetRequiredService<ApplicationDbContext>());
@@ -25,9 +27,17 @@ builder.Services.AddScoped<IApplicationDbContext>(provider =>
 // MediatR — scans the assembly containing RegisterCommand for all handlers.
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(RegisterCommand).Assembly));
 
-// Auth-related settings & services
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
-builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection(EmailSettings.SectionName));
+// Auth-related settings & services — validated at startup instead of failing lazily.
+builder.Services.AddOptions<JwtSettings>()
+    .Bind(builder.Configuration.GetSection(JwtSettings.SectionName))
+    .Validate(s => !string.IsNullOrWhiteSpace(s.Secret) && s.Secret.Length >= 32,
+        "Jwt:Secret must be set and at least 32 characters (256 bits) via User Secrets or environment variables.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<EmailSettings>()
+    .Bind(builder.Configuration.GetSection(EmailSettings.SectionName))
+    .Validate(s => !string.IsNullOrWhiteSpace(s.SmtpHost), "Email:SmtpHost must be configured.")
+    .ValidateOnStart();
 
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();

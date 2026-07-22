@@ -13,7 +13,6 @@
   <ItemGroup>
     <Folder Include="Common\Behaviors\" />
     <Folder Include="Common\Exceptions\" />
-    <Folder Include="Common\Models\" />
   </ItemGroup>
 
   <ItemGroup>

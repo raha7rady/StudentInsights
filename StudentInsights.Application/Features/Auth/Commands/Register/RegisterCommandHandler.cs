@@ -54,10 +54,16 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterR
         {
             // The AnyAsync check above covers the common case; this catches the
             // narrow race where two registrations for the same email land at
-            // nearly the same instant. The unique index on Email is the only
-            // constraint this insert can violate, so any DbUpdateException here
-            // means that race was hit.
-            throw new DomainException("An account with this email already exists.");
+            // nearly the same instant. Re-check rather than assuming the failure
+            // was the email-uniqueness violation, so an unrelated DbUpdateException
+            // (e.g. a transient DB error) isn't misreported as "email already exists".
+            var stillInUse = await _context.Users
+                .AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+            if (stillInUse)
+                throw new DomainException("An account with this email already exists.");
+
+            throw;
         }
 
         await _emailSender.SendEmailConfirmationAsync(user.Email, user.FirstName, user.Id, rawToken, cancellationToken);

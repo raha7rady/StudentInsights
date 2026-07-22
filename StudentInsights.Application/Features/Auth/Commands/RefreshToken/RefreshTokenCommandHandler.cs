@@ -31,7 +31,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
 
         if (existingToken.IsRevoked)
         {
-            // A revoked (already-rotated) token was presented again — treat
+            // A revoked (already-rotated) token was presented again --- treat
             // this as a possible compromise and kill every active session
             // for this user.
             var activeTokens = await _context.RefreshTokens
@@ -47,7 +47,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
             }
             catch (DbUpdateConcurrencyException)
             {
-                // Another request already revoked these rows first — the end
+                // Another request already revoked these rows first --- the end
                 // state we wanted is already achieved, nothing further to do.
             }
 
@@ -57,8 +57,12 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
         if (existingToken.IsExpired)
             throw new DomainException("Refresh token has expired.");
 
+        // The global soft-delete query filter applies to Include()'d navigations
+        // too, so a token belonging to a soft-deleted user comes back with
+        // User == null rather than being excluded outright. Treat that the
+        // same as "invalid token" instead of letting it NullReferenceException.
         var user = existingToken.User;
-        if (!user.CanLogIn())
+        if (user is null || !user.CanLogIn())
             throw new DomainException("Invalid refresh token.");
 
         var (accessToken, accessTokenExpiresAtUtc) = _jwtTokenGenerator.GenerateAccessToken(user);
@@ -66,7 +70,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
         var rawNewRefreshToken = SecureTokenGenerator.GenerateToken();
         var newTokenHash = SecureTokenGenerator.Hash(rawNewRefreshToken);
 
-        // Preserve the original session length rather than resetting it —
+        // Preserve the original session length rather than resetting it ---
         // rotation keeps the token fresh without silently extending "remember me".
         var newRefreshToken = StudentInsights.Domain.Entities.RefreshToken.Create(
             user, newTokenHash, existingToken.ExpiresAtUtc, request.IpAddress);
@@ -82,7 +86,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
         {
             // Another request rotated this exact token first (e.g. a duplicate
             // or racing refresh call). Treat this attempt as if the token had
-            // already been used — the client should retry with whichever
+            // already been used --- the client should retry with whichever
             // response won the race.
             throw new DomainException("Invalid refresh token.");
         }
