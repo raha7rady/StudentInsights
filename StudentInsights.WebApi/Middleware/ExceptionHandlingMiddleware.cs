@@ -57,6 +57,23 @@ public class ExceptionHandlingMiddleware
                 Detail = ex.Message
             });
         }
+        catch (ValidationException ex)
+        {
+            _logger.LogWarning(ex, "Validation failure on {Path}", context.Request.Path);
+
+            if (context.Response.HasStarted)
+            {
+                throw;
+            }
+
+            context.Response.ContentType = "application/problem+json";
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new ValidationProblemDetails(ex.Errors)
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Validation Failed"
+            });
+        }
         catch (DomainException ex)
         {
             _logger.LogWarning(ex, "Domain rule violation on {Path}", context.Request.Path);

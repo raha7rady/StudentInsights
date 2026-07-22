@@ -1,24 +1,27 @@
 ﻿namespace StudentInsights.Application.Common.Models;
 
 /// <summary>
-/// Shared paging input for every list Query in the project (Courses now,
-/// LearningActivities/Exams/etc. later), so paging rules aren't redefined
-/// per module. Defensive clamping happens here as a last-resort safety
-/// net; per-module Validators (FluentValidation) are still the primary
-/// place to reject out-of-range input with a proper 400 response.
+/// Shared paging input for all list queries (Courses, LearningActivities,
+/// Exams, Goals, etc.). Invalid values are clamped to safe defaults instead
+/// of throwing exceptions. FluentValidation remains the primary mechanism
+/// for returning validation errors; this class acts as a defensive fallback
+/// to keep paging behavior predictable.
 /// </summary>
 public class PaginationParams
 {
-    private const int MaxPageSize = 50;
-    private const int DefaultPageSize = 10;
+    public const int DefaultPageNumber = 1;
+    public const int DefaultPageSize = 10;
+    public const int MaxPageSize = 50;
 
-    private int _pageNumber = 1;
+    private int _pageNumber = DefaultPageNumber;
     private int _pageSize = DefaultPageSize;
 
     public int PageNumber
     {
         get => _pageNumber;
-        set => _pageNumber = value < 1 ? 1 : value;
+        set => _pageNumber = value < DefaultPageNumber
+            ? DefaultPageNumber
+            : value;
     }
 
     public int PageSize

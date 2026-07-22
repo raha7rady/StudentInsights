@@ -3,9 +3,16 @@ using StudentInsights.Domain.ValueObjects;
 
 namespace StudentInsights.Domain.Entities;
 
-// TODO: In the Application layer, deleting a Course must also soft-delete all related
-// LearningActivities, Exams, and StudyLogs. These are separate aggregates, so the
-// orchestration belongs in DeleteCourseCommandHandler, not in the Domain layer.
+// NOTE: Deleting a Course also soft-deletes its related LearningActivities,
+// Exams, and StudyLogs. Since those are separate aggregates (see the
+// comment on the collections below), that orchestration is intentionally
+// NOT implemented here — it lives in DeleteCourseCommandHandler
+// (Application layer), which loads each dependent collection from its own
+// DbSet and soft-deletes it explicitly before soft-deleting the Course.
+// ClassSchedules are NOT part of that cascade: they are part of the Course
+// aggregate itself (not independently soft-deletable — see
+// CourseConfiguration's Cascade FK) and are only removed if the Course row
+// is ever hard-deleted.
 
 public class Course : BaseEntity
 {
@@ -65,6 +72,19 @@ public class Course : BaseEntity
     public void UpdateInstructor(string? instructorName)
     {
         InstructorName = instructorName?.Trim();
+        MarkModified();
+    }
+
+    /// <summary>
+    /// Only way to change Credits after creation. Re-uses the same
+    /// invariant enforced in Create, so "credits must be positive" is
+    /// defined once instead of drifting between the two call sites.
+    /// </summary>
+    public void UpdateCredits(int credits)
+    {
+        if (credits <= 0)
+            throw new DomainException("Credits must be greater than zero.");
+        Credits = credits;
         MarkModified();
     }
 
