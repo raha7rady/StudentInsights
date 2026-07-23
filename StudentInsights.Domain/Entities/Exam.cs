@@ -54,6 +54,31 @@ public class Exam : BaseEntity
         MarkModified();
     }
 
+    /// <summary>
+    /// Only way to change Title after creation. Re-uses the same
+    /// "required, non-blank" invariant enforced in Create, mirroring
+    /// Course.Rename so the rule is defined once per entity instead of
+    /// drifting between the two call sites.
+    /// </summary>
+    public void Rename(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new DomainException("Title is required.");
+        Title = title.Trim();
+        MarkModified();
+    }
+
+    /// <summary>
+    /// Only way to change Description after creation. Mirrors
+    /// Course.UpdateInstructor: no NotEmpty guard since Description is
+    /// optional, just trims and allows null to clear it.
+    /// </summary>
+    public void UpdateDescription(string? description)
+    {
+        Description = description?.Trim();
+        MarkModified();
+    }
+
     public void RecordGrade(decimal grade)
     {
         Grade = new Grade(grade);
