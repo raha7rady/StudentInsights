@@ -10,13 +10,21 @@ using StudentInsights.Infrastructure.Email;
 using StudentInsights.Infrastructure.Persistence;
 using StudentInsights.Infrastructure.Security;
 using StudentInsights.WebApi.Middleware;
+using StudentInsights.WebApi.Serialization;
 using StudentInsights.WebApi.Services;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // See UtcDateTimeConverter for the full rationale: normalizes every
+        // DateTime crossing the API boundary (request and response) to
+        // DateTimeKind.Utc, matching this project's *Utc naming convention.
+        options.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
