@@ -1,5 +1,4 @@
 ﻿using MediatR;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Mvc;
 using StudentInsights.Application.Features.Auth.Commands.ConfirmEmail;
 using StudentInsights.Application.Features.Auth.Commands.ForgotPassword;

@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="Persistence\Configuration\pnejj05w.v3i~" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\StudentInsights.Application\StudentInsights.Application.csproj" />
     <ProjectReference Include="..\StudentInsights.Domain\StudentInsights.Domain.csproj" />
   </ItemGroup>

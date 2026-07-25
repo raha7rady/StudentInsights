@@ -61,6 +61,29 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// CORS — required because the React frontend (per the architecture doc,
+// §9) is a separately hosted SPA, never served from this API's origin.
+// Named policy, origins/headers/methods pulled from configuration rather
+// than hard-coded, so the allowed origin(s) can differ between
+// Development (Vite's localhost port) and Production (the deployed
+// frontend URL) without a code change.
+const string FrontendCorsPolicy = "FrontendCorsPolicy";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(FrontendCorsPolicy, policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+        // No AllowCredentials(): the API is Bearer-token authenticated,
+        // not cookie-authenticated, so browsers never need to send
+        // credentials cross-origin for this API.
+    });
+});
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -138,6 +161,8 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
+
+app.UseCors(FrontendCorsPolicy);
 
 app.UseAuthentication();
 app.UseAuthorization();
