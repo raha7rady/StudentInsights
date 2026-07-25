@@ -7,6 +7,7 @@ using StudentInsights.Application.Features.Dashboard.DTOs;
 using StudentInsights.Application.Features.Dashboard.Enums;
 using StudentInsights.Application.Features.Exams.DTOs;
 using StudentInsights.Application.Features.Exams.Mappings;
+using StudentInsights.Application.Features.Goals.Common;
 using StudentInsights.Application.Features.Goals.DTOs;
 using StudentInsights.Application.Features.Goals.Mappings;
 using StudentInsights.Application.Features.Goals.Services;
@@ -99,7 +100,18 @@ public class GetDashboardSummaryQueryHandler : IRequestHandler<GetDashboardSumma
             .Sum(sl => sl.DurationMinutes);
 
         var goalsProgress = goals
-            .Select(goal => BuildGoalDto(goal, creditWeightedGpa, studyLogs, relatedActivityStatuses))
+            .Select(goal =>
+            {
+                var inputs = GoalProgressInputsProvider.BuildInputs(
+                    goal,
+                    creditWeightedGpa,
+                    studyLogs,
+                    relatedActivityStatuses);
+
+                var progress = GoalProgressCalculator.CalculateProgress(goal, inputs);
+
+                return goal.ToDto(progress);
+            })
             .ToList();
 
         var recentLearningActivities = await GetRecentLearningActivitiesAsync(userId, cancellationToken);
@@ -166,14 +178,16 @@ public class GetDashboardSummaryQueryHandler : IRequestHandler<GetDashboardSumma
             .ToDictionaryAsync(la => la.Id, la => la.Status, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<StudyLogEntry>> GetStudyLogsAsync(
-        Guid userId, IReadOnlyList<Goal> goals, DateTime weekStartUtc, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<(DateTime StudyDateUtc, int DurationMinutes)>> GetStudyLogsAsync(
+        Guid userId,
+        IReadOnlyList<Goal> goals,
+        DateTime weekStartUtc,
+        CancellationToken cancellationToken)
     {
         // Bounded, not "all logs ever": a StudyHours goal's progress needs
         // logs back to that goal's own CreatedAtUtc, so the fetch only
         // needs to reach as far back as the earliest such goal (or the
-        // current week's start, whichever is earlier) -- not the user's
-        // entire study history, which could span years and grow unbounded.
+        // current week's start, whichever is earlier).
         var earliestNeededUtc = goals
             .Where(g => g.Type == GoalType.StudyHours)
             .Select(g => g.CreatedAtUtc)
@@ -183,30 +197,10 @@ public class GetDashboardSummaryQueryHandler : IRequestHandler<GetDashboardSumma
         return await _context.StudyLogs
             .AsNoTracking()
             .Where(sl => sl.UserId == userId && sl.StudyDateUtc >= earliestNeededUtc)
-            .Select(sl => new StudyLogEntry(sl.StudyDateUtc, sl.DurationMinutes))
+            .Select(sl => new ValueTuple<DateTime, int>(
+                sl.StudyDateUtc,
+                sl.DurationMinutes))
             .ToListAsync(cancellationToken);
-    }
-
-    private static GoalDto BuildGoalDto(
-        Goal goal,
-        decimal? creditWeightedGpa,
-        IReadOnlyList<StudyLogEntry> studyLogs,
-        IReadOnlyDictionary<Guid, ActivityStatus> relatedActivityStatuses)
-    {
-        var studyMinutesSinceGoalCreated = goal.Type == GoalType.StudyHours
-            ? studyLogs.Where(sl => sl.StudyDateUtc >= goal.CreatedAtUtc).Sum(sl => sl.DurationMinutes)
-            : 0;
-
-        ActivityStatus? relatedActivityStatus =
-            goal.RelatedActivityId.HasValue &&
-            relatedActivityStatuses.TryGetValue(goal.RelatedActivityId.Value, out var status)
-                ? status
-                : null;
-
-        var inputs = new GoalProgressInputs(creditWeightedGpa, studyMinutesSinceGoalCreated, relatedActivityStatus);
-        var progress = GoalProgressCalculator.CalculateProgress(goal, inputs);
-
-        return goal.ToDto(progress);
     }
 
     private async Task<IReadOnlyList<RecentActivityDto>> GetRecentLearningActivitiesAsync(
@@ -249,5 +243,4 @@ public class GetDashboardSummaryQueryHandler : IRequestHandler<GetDashboardSumma
             .ToList();
     }
 
-    private sealed record StudyLogEntry(DateTime StudyDateUtc, int DurationMinutes);
 }
