@@ -1,11 +1,14 @@
 using System.Text;
 using FluentValidation;
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StudentInsights.Application.Common.Behaviors;
 using StudentInsights.Application.Common.Interfaces;
 using StudentInsights.Application.Features.Auth.Commands.Register;
+using StudentInsights.Infrastructure.BackgroundJobs;
 using StudentInsights.Infrastructure.Email;
 using StudentInsights.Infrastructure.Persistence;
 using StudentInsights.Infrastructure.Security;
@@ -61,8 +64,8 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// CORS — required because the React frontend (per the architecture doc,
-// §9) is a separately hosted SPA, never served from this API's origin.
+// CORS  required because the React frontend (per the architecture doc,
+// 9) is a separately hosted SPA, never served from this API's origin.
 // Named policy, origins/headers/methods pulled from configuration rather
 // than hard-coded, so the allowed origin(s) can differ between
 // Development (Vite's localhost port) and Production (the deployed
@@ -92,19 +95,42 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<IApplicationDbContext>(provider =>
     provider.GetRequiredService<ApplicationDbContext>());
 
-// MediatR — scans the assembly containing RegisterCommand for all handlers.
+// Hangfire  recurring background jobs (currently just Notification
+// generation, see BackgroundJobs/NotificationGenerationJob.cs). Reuses
+// the same DefaultConnection SQL Server database as ApplicationDbContext
+// rather than a second connection string: Hangfire creates its own
+// "HangFire" schema inside the existing database, so no new database is
+// introduced for this module.
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        new SqlServerStorageOptions
+        {
+            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+            QueuePollInterval = TimeSpan.Zero,
+            UseRecommendedIsolationLevel = true,
+            DisableGlobalLocks = true
+        }));
+
+builder.Services.AddHangfireServer();
+
+// MediatR  scans the assembly containing RegisterCommand for all handlers.
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(RegisterCommand).Assembly);
     cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
-// FluentValidation — scans the same assembly for every IValidator<T>
+// FluentValidation  scans the same assembly for every IValidator<T>
 // (e.g. CreateCourseCommandValidator), picked up automatically by
 // ValidationBehavior above.
 builder.Services.AddValidatorsFromAssembly(typeof(RegisterCommand).Assembly);
 
-// Auth-related settings & services — validated at startup instead of failing lazily.
+// Auth-related settings & services  validated at startup instead of failing lazily.
 builder.Services.AddOptions<JwtSettings>()
     .Bind(builder.Configuration.GetSection(JwtSettings.SectionName))
     .Validate(s => !string.IsNullOrWhiteSpace(s.Secret) && s.Secret.Length >= 32,
@@ -168,5 +194,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Hangfire dashboard, gated by HangfireDashboardAuthorizationFilter (see
+// that class for the full rationale) — never left open in Production.
+app.MapHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireDashboardAuthorizationFilter(app.Environment, app.Configuration) }
+});
+
+// Registering a recurring job is itself idempotent — re-running this on
+// every app start just re-registers the same schedule under the same
+// job id, it does not create duplicates — so no separate seed/migration
+// step is needed for it.
+RecurringJob.AddOrUpdate<NotificationGenerationJob>(
+    "notification-generation",
+    job => job.RunAsync(CancellationToken.None),
+    Cron.Hourly);
 
 app.Run();
