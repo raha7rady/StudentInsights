@@ -21,7 +21,11 @@ public class SystemSettingConfiguration : IEntityTypeConfiguration<SystemSetting
             .IsRequired()
             .HasMaxLength(1000);
 
+        builder.Property(s => s.Description)
+           .HasMaxLength(500);
+
         builder.Property(s => s.RowVersion)
             .IsRowVersion();
+
     }
 }

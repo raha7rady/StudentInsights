@@ -196,6 +196,12 @@ public class User : BaseEntity
         MarkModified();
     }
 
+    public void DemoteToStudent()
+    {
+        Role = UserRole.Student;
+        MarkModified();
+    }
+
     public IReadOnlyCollection<RefreshToken> RefreshTokens => _refreshTokens;
     public IReadOnlyCollection<Course> Courses => _courses;
     public IReadOnlyCollection<Goal> Goals => _goals;
